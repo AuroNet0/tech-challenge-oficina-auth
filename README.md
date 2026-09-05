@@ -57,3 +57,5 @@ O workflow `Auth CI` executa testes e build Maven em eventos de `push`, `pull_re
 branches `homolog` e `main`, alem de permitir execucao manual via `workflow_dispatch`.
 
 Este projeto ainda nao documenta deploy, criacao de recursos AWS, API Gateway, banco de dados ou JWT.
+
+test
