@@ -1,0 +1,31 @@
+name: Auth CI
+
+on:
+  push:
+    branches:
+      - homolog
+      - main
+  pull_request:
+    branches:
+      - homolog
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Run tests
+        run: mvn -B test
+
+      - name: Build package
+        run: mvn -B clean package -DskipTests
