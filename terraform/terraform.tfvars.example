@@ -1,0 +1,2 @@
+db_password = "CHANGE_ME"
+jwt_secret  = "CHANGE_ME"
