@@ -4,3 +4,8 @@ target/
 .classpath
 .project
 .settings/
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
