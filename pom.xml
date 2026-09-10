@@ -14,8 +14,10 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.jupiter.version>5.11.4</junit.jupiter.version>
         <aws.lambda.java.core.version>1.2.3</aws.lambda.java.core.version>
+        <aws.lambda.java.events.version>3.15.0</aws.lambda.java.events.version>
         <postgresql.version>42.7.4</postgresql.version>
         <jjwt.version>0.12.6</jjwt.version>
+        <jackson.version>2.17.2</jackson.version>
     </properties>
 
     <dependencies>
@@ -23,6 +25,12 @@
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-lambda-java-core</artifactId>
             <version>${aws.lambda.java.core.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-lambda-java-events</artifactId>
+            <version>${aws.lambda.java.events.version}</version>
         </dependency>
 
         <dependency>
@@ -49,6 +57,12 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
