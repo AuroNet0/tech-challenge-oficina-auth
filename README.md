@@ -40,6 +40,36 @@ Cliente -> API Gateway -> Lambda Auth -> RDS PostgreSQL -> JWT
 
 A Lambda Auth é o componente serverless de autenticação por CPF. A exposição HTTP pelo API Gateway deve existir fora deste repositório ou ser integrada por outro componente de infraestrutura.
 
+## Diagrama da arquitetura
+
+```mermaid
+flowchart LR
+    CLIENT["Cliente"]
+
+    APIGW["Amazon API Gateway"]
+
+    subgraph LAMBDA["AWS Lambda - Java 21"]
+        HANDLER["Auth Handler"]
+        CPF["CpfValidator"]
+        CLIENTSERVICE["Consulta do Cliente"]
+        JWT["Gerador JWT"]
+
+        HANDLER --> CPF
+        CPF --> CLIENTSERVICE
+        CLIENTSERVICE --> JWT
+    end
+
+    RDS[("Amazon RDS<br/>PostgreSQL")]
+
+    CLIENT -->|"CPF"| APIGW
+    APIGW -->|"Invocação"| HANDLER
+
+    CLIENTSERVICE -->|"Consulta cliente<br/>por CPF"| RDS
+
+    JWT -->|"JWT"| APIGW
+    APIGW -->|"Token"| CLIENT
+```
+
 ## Fluxo de autenticação
 
 1. O API Gateway invoca a Lambda enviando um evento HTTP API v2.
