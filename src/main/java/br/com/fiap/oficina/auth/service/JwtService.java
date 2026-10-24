@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
+@Deprecated
 public class JwtService {
 
     private static final String JWT_SECRET_ENV = "JWT_SECRET";

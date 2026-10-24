@@ -47,11 +47,8 @@ jobs:
             echo "cmd=mvn" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run tests
-        run: ${{ steps.maven.outputs.cmd }} -B test
-
-      - name: Build package
-        run: ${{ steps.maven.outputs.cmd }} -B package -DskipTests
+      - name: Verify tests, PostgreSQL, coverage and Lambda package
+        run: ${{ steps.maven.outputs.cmd }} -B clean verify
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
