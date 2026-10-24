@@ -1,5 +1,9 @@
 # Identidade independente — Etapa 8.1
 
+> Registro da entrega 8.1. O estado atual do handler, autenticação RS256/JWKS, rehash e V2
+> está documentado em [authentication.md](authentication.md). As descrições de 503 permanente
+> e da 8.2 como futura abaixo representam o estado histórico da 8.1.
+
 ## Escopo e estado operacional
 
 Java 21, AWS Lambda e JDBC, sem Spring, JPA ou acesso aos bancos de OS, Execution e Billing.

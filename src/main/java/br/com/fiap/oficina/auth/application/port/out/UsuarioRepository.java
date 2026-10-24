@@ -9,5 +9,5 @@ public interface UsuarioRepository {
     Optional<Usuario> buscarPorEmail(String email);
     void inserir(Usuario usuario);
     void salvar(Usuario usuario);
+    boolean atualizarHash(UUID id, String anterior, String novo, java.time.Instant agora);
 }
-

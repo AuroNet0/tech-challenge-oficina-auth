@@ -2,6 +2,7 @@ target/
 .env
 .env.*
 !.env.example
+.local-secrets/
 .idea/
 *.iml
 .classpath

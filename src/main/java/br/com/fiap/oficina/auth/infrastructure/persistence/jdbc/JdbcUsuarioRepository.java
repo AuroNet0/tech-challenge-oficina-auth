@@ -115,6 +115,22 @@ final class JdbcUsuarioRepository implements UsuarioRepository {
         statement.setObject(8, usuario.id());
     }
 
+    @Override
+    public boolean atualizarHash(UUID id, String anterior, String novo, java.time.Instant agora) {
+        if (!bloqueados.contains(id)) {
+            throw new IdentityException(CONCORRENCIA);
+        }
+        try (var statement = connection.prepareStatement("UPDATE usuarios SET password_hash=?, atualizado_em=GREATEST(atualizado_em, ?) WHERE id=? AND password_hash=? AND ativo")) {
+            statement.setString(1, novo);
+            statement.setTimestamp(2, Timestamp.from(agora));
+            statement.setObject(3, id);
+            statement.setString(4, anterior);
+            return statement.executeUpdate() == 1;
+        } catch (SQLException exception) {
+            throw JdbcIdentityTransaction.traduzir(exception);
+        }
+    }
+
     private void associacoes(Usuario usuario) throws SQLException {
         try (var statement = connection.prepareStatement("INSERT INTO usuario_papeis (usuario_id, papel) VALUES (?, ?) ON CONFLICT DO NOTHING")) {
             for (Papel papel : usuario.papeis()) {
@@ -135,4 +151,3 @@ final class JdbcUsuarioRepository implements UsuarioRepository {
         }
     }
 }
-

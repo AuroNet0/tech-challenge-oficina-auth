@@ -1,7 +1,7 @@
 package br.com.fiap.oficina.auth.domain.exception;
 
 public class IdentityException extends RuntimeException {
-    public enum Motivo { INVALIDO, DUPLICADO, NAO_ENCONTRADO, NAO_AUTORIZADO, INATIVO, CONCORRENCIA, PERSISTENCIA }
+    public enum Motivo { INVALIDO, DUPLICADO, NAO_ENCONTRADO, NAO_AUTORIZADO, INATIVO, CONCORRENCIA, PERSISTENCIA, CREDENCIAIS_INVALIDAS, LIMITE_EXCEDIDO }
 
     private final Motivo motivo;
 
@@ -14,4 +14,3 @@ public class IdentityException extends RuntimeException {
         return motivo;
     }
 }
-

@@ -83,6 +83,8 @@ class IdentityUseCasesTest {
             usuarios.put(usuario.id(), usuario);
         }
         public void salvar(Usuario usuario) { usuarios.put(usuario.id(), usuario); }
+        public boolean atualizarHash(UUID id, String anterior, String novo, java.time.Instant agora) {
+            throw new UnsupportedOperationException();
+        }
     }
 }
-

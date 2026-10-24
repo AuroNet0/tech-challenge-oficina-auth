@@ -36,7 +36,7 @@ class IdentityPostgresIT {
         datasource.setUser(POSTGRES.getUsername());
         datasource.setPassword(POSTGRES.getPassword());
         var flyway = Flyway.configure().dataSource(datasource).load();
-        assertEquals(1, flyway.migrate().migrationsExecuted);
+        assertEquals(2, flyway.migrate().migrationsExecuted);
         flyway.validate();
         assertEquals(0, flyway.migrate().migrationsExecuted);
         transaction = new JdbcIdentityTransaction(datasource);
@@ -60,6 +60,15 @@ class IdentityPostgresIT {
 
     @Test
     void jarShadeExecutaHandlerHashEMigracaoSeparada() throws Exception {
+        var now = Instant.now();
+        var probe = criar("probe@example.test", null);
+        inserir(probe);
+        var manifest = br.com.fiap.oficina.auth.support.AuthFixtures.key("first",
+                br.com.fiap.oficina.auth.support.AuthFixtures.FIRST, now.plusSeconds(7200), true);
+        manifest.put("publishFrom", now.minusSeconds(3600).toString());
+        manifest.put("signFrom", now.minusSeconds(300).toString());
+        var keyFile = java.nio.file.Files.createTempFile("auth-test-keys-", ".json");
+        java.nio.file.Files.writeString(keyFile, br.com.fiap.oficina.auth.support.AuthFixtures.document("first", manifest));
         var output = java.nio.file.Files.createTempFile(java.nio.file.Path.of("target"), "packaged-runtime-", ".log");
         var javaExecutable = java.nio.file.Path.of(System.getProperty("java.home"), "bin", "java").toString();
         var classpath = java.nio.file.Path.of("target", "tech-challenge-oficina-auth.jar").toAbsolutePath()
@@ -72,6 +81,10 @@ class IdentityPostgresIT {
                 "AUTH_DB_PORT", POSTGRES.getMappedPort(5432).toString(),
                 "AUTH_DB_NAME", POSTGRES.getDatabaseName(), "AUTH_DB_USER", POSTGRES.getUsername(),
                 "AUTH_DB_PASSWORD", POSTGRES.getPassword(), "AUTH_ENVIRONMENT", "local", "AUTH_DB_SSLMODE", "disable"));
+        builder.environment().remove("AWS_LAMBDA_FUNCTION_NAME");
+        builder.environment().putAll(Map.of("AUTH_KEY_PROVIDER", "local-file", "AUTH_LOCAL_KEY_FILE", keyFile.toString(),
+                "AUTH_JWT_ISSUER", br.com.fiap.oficina.auth.support.AuthFixtures.ISSUER,
+                "AUTH_JWT_AUDIENCE", br.com.fiap.oficina.auth.support.AuthFixtures.AUDIENCE));
         var process = builder.start();
         try {
             assertTrue(process.waitFor(30, TimeUnit.SECONDS));
@@ -80,6 +93,7 @@ class IdentityPostgresIT {
             assertTrue(log.contains("PACKAGED_RUNTIME_OK"), log);
         } finally {
             process.destroyForcibly();
+            java.nio.file.Files.deleteIfExists(keyFile);
         }
     }
 
