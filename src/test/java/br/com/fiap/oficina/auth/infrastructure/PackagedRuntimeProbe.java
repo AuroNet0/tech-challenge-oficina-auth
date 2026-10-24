@@ -14,6 +14,11 @@ public final class PackagedRuntimeProbe {
         if (handler.handleRequest(null, null).getStatusCode() != 400) {
             throw new IllegalStateException("Handler deveria falhar fechado");
         }
+        if (handler.handleRequest(event("POST", "/internal/v1/identity/client-access/check", "{}"), null)
+                .getStatusCode() != 404) {
+            throw new IllegalStateException("Rota interna deveria permanecer inacessivel");
+        }
+        Class.forName("br.com.fiap.oficina.auth.application.usecase.VerificarAcessoClienteUseCase");
         var hasher = new Argon2idPasswordHasher();
         char[] senha = "senha-ficticia-probe".toCharArray();
         try {
