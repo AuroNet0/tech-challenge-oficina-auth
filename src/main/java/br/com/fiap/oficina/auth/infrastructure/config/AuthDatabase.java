@@ -8,6 +8,10 @@ public final class AuthDatabase {
     private AuthDatabase() {}
 
     public static HikariDataSource criar(Map<String, String> env) {
+        return criar(env, false);
+    }
+
+    public static HikariDataSource criar(Map<String, String> env, boolean internal) {
         String host = required(env, "AUTH_DB_HOST");
         String name = required(env, "AUTH_DB_NAME");
         String port = env.getOrDefault("AUTH_DB_PORT", "5432");
@@ -22,17 +26,24 @@ public final class AuthDatabase {
         config.setJdbcUrl("jdbc:postgresql://" + host + ":" + port + "/" + name);
         config.setUsername(required(env, "AUTH_DB_USER"));
         config.setPassword(required(env, "AUTH_DB_PASSWORD"));
-        config.setMaximumPoolSize(2);
+        int poolSize = internal ? Integer.parseInt(env.getOrDefault("AUTH_INTERNAL_DB_POOL_SIZE", "2")) : 2;
+        if (poolSize < 1 || poolSize > 4) { throw new IllegalArgumentException("Pool Auth interno deve ter 1 a 4 conexoes"); }
+        config.setMaximumPoolSize(poolSize);
         config.setMinimumIdle(0);
-        config.setConnectionTimeout(3000);
-        config.setValidationTimeout(1000);
+        config.setConnectionTimeout(internal ? 500 : 3000);
+        config.setValidationTimeout(internal ? 250 : 1000);
         config.setIdleTimeout(60000);
         config.setMaxLifetime(300000);
         config.setInitializationFailTimeout(-1);
-        config.addDataSourceProperty("connectTimeout", "3");
-        config.addDataSourceProperty("socketTimeout", "5");
-        config.addDataSourceProperty("options", "-c statement_timeout=4000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=10000");
+        config.addDataSourceProperty("connectTimeout", internal ? "1" : "3");
+        config.addDataSourceProperty("socketTimeout", internal ? "1" : "5");
+        config.addDataSourceProperty("options", internal
+                ? "-c statement_timeout=500 -c lock_timeout=250 -c idle_in_transaction_session_timeout=2000"
+                : "-c statement_timeout=4000 -c lock_timeout=2000 -c idle_in_transaction_session_timeout=10000");
         config.addDataSourceProperty("sslmode", ssl);
+        if (internal && env.containsKey("AUTH_DB_SSLROOTCERT")) {
+            config.addDataSourceProperty("sslrootcert", required(env, "AUTH_DB_SSLROOTCERT"));
+        }
         return new HikariDataSource(config);
     }
 

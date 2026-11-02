@@ -53,6 +53,10 @@ Relatório: `target/site/jacoco/index.html`.
 
 ## Compatibilidade e implantação
 
+O runtime HTTPS interno para Kubernetes, independente da Lambda, está documentado em
+[9.2.3.1 — Auth interno](docs/9.2.3.1-auth-interno-kubernetes.md), incluindo Docker,
+mTLS, JWKS público, variáveis, probes e ajustes necessários na Platform.
+
 Preservados nome da Lambda, runtime java21, handler e artefato `target/tech-challenge-oficina-auth.jar`.
 O código JWT HS256 legado permanece isolado e depreciado para referência de contrato.
 Terraform não foi alterado: a futura infraestrutura deverá configurar banco Auth, AUTH_DB_*,

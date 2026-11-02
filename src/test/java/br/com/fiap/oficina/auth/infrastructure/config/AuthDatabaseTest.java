@@ -28,6 +28,25 @@ class AuthDatabaseTest {
     }
 
     @Test
+    void poolInternoPreservaTlsEUsaTimeoutsMenoresQueOsDoConsumidor() {
+        var internal = env();
+        internal.put("AUTH_DB_SSLROOTCERT", "/rds-ca/ca.pem");
+        internal.put("AUTH_INTERNAL_DB_POOL_SIZE", "3");
+        try (var datasource = AuthDatabase.criar(internal, true)) {
+            assertEquals(3, datasource.getMaximumPoolSize());
+            assertEquals(500, datasource.getConnectionTimeout());
+            assertEquals(250, datasource.getValidationTimeout());
+            assertEquals("1", datasource.getDataSourceProperties().getProperty("socketTimeout"));
+            assertEquals("/rds-ca/ca.pem", datasource.getDataSourceProperties().getProperty("sslrootcert"));
+            assertEquals("verify-full", datasource.getDataSourceProperties().getProperty("sslmode"));
+        }
+        for (String value : List.of("0", "5", "invalid")) {
+            internal.put("AUTH_INTERNAL_DB_POOL_SIZE", value);
+            assertThrows(IllegalArgumentException.class, () -> AuthDatabase.criar(internal, true));
+        }
+    }
+
+    @Test
     void recusaConfiguracaoAusenteInjecaoOuTlsDesativadoRemotamente() {
         assertThrows(IllegalArgumentException.class, () -> AuthDatabase.criar(Map.of("DB_HOST", "os.internal")));
         for (String key : List.of("AUTH_DB_HOST", "AUTH_DB_NAME", "AUTH_DB_USER", "AUTH_DB_PASSWORD")) {
