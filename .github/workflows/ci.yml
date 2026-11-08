@@ -1,0 +1,64 @@
+name: Productive build verification
+
+"on":
+  pull_request:
+    branches: [homolog]
+  push:
+    branches: [homolog]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+      IMAGE: oficina-auth:ci
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test build verifier
+        run: python -B -m unittest discover -s scripts -p 'test_*.py'
+      - name: Build productive Linux image from source
+        run: |
+          docker build --platform linux/amd64 --pull=false \
+            --label org.opencontainers.image.revision="$GITHUB_SHA" \
+            --label org.opencontainers.image.source="https://github.com/$GITHUB_REPOSITORY" \
+            --tag "$IMAGE" .
+      - name: Full Maven suite and JaCoCo gate
+        run: mvn -B -ntp clean verify -Dauth.internal.image="$IMAGE"
+      - name: Verify reports, package, image and local provenance
+        run: python -B scripts/verify_build.py --image "$IMAGE"
+      - name: Write sanitized test summary even on failure
+        if: always()
+        run: python -B scripts/verify_build.py --test-summary
+      - name: Upload non-sensitive verification summary only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-evidence
+          path: |
+            target/build-evidence.json
+            target/test-summary.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Static analysis dependency
+        if: always()
+        run: echo "SonarQube pending project, server and token configuration; no analysis approval claimed." >> "$GITHUB_STEP_SUMMARY"
