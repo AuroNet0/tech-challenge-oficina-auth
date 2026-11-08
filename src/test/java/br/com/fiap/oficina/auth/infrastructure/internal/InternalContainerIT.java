@@ -18,6 +18,7 @@ import org.testcontainers.utility.MountableFile;
 import java.net.*;
 import java.net.http.*;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.time.*;
 import java.util.*;
 import static br.com.fiap.oficina.auth.support.AuthFixtures.*;
@@ -30,7 +31,21 @@ class InternalContainerIT {
     @Test void imagemProdutivaComPostgres17MtlsJwtFalhaDeBancoESigterm() throws Exception {
         String image = System.getProperty("auth.internal.image");
         var tls = new TestTls(directory);
-        Files.writeString(directory.resolve("jwks.json"), new ObjectMapper().writeValueAsString(
+        var originalPermissions = Files.getFileStore(directory).supportsFileAttributeView("posix")
+                ? Files.getPosixFilePermissions(directory) : null;
+        var serverMount = tls.serverMount();
+        try (var files = Files.list(serverMount)) {
+            assertEquals(Set.of("server.p12", "trust.p12"), files.map(path -> path.getFileName().toString()).collect(java.util.stream.Collectors.toSet()));
+        }
+        if (originalPermissions != null) {
+            assertEquals(originalPermissions, Files.getPosixFilePermissions(directory));
+            assertEquals(PosixFilePermissions.fromString("rwxr-xr-x"), Files.getPosixFilePermissions(serverMount));
+            for (String name : List.of("server.p12", "trust.p12")) {
+                assertEquals(PosixFilePermissions.fromString("r--r--r--"), Files.getPosixFilePermissions(serverMount.resolve(name)));
+            }
+        }
+        var jwksMount = tls.serverMount();
+        Files.writeString(jwksMount.resolve("jwks.json"), new ObjectMapper().writeValueAsString(
                 new JwksService(provider(Clock.fixed(NOW, ZoneOffset.UTC))).documento()));
         try (var postgres = new PostgreSQLContainer<>("postgres:17.6-alpine")) {
             postgres.addExposedPorts(8443, 9443);
@@ -50,12 +65,12 @@ class InternalContainerIT {
             new JdbcIdentityTransaction(datasource).executar(repository -> { repository.inserir(user); return null; });
             try (var jwks = new GenericContainer<>(image)
                     .withNetworkMode("container:" + postgres.getContainerId())
-                    .withCopyFileToContainer(MountableFile.forHostPath(directory, 0755), "/tls")
+                    .withCopyFileToContainer(MountableFile.forHostPath(jwksMount, 0755), "/tls")
                     .withCopyFileToContainer(MountableFile.forHostPath(Path.of("target/test-classes").toAbsolutePath(), 0755), "/fixtures")
                     .withCreateContainerCmdModifier(command -> command.withEntrypoint("java", "-cp", "/fixtures:/app/app.jar",
                             ContainerJwksMain.class.getName()))
                     .waitingFor(Wait.forLogMessage(".*JWKS_FIXTURE_READY.*", 1))) {
-                jwks.start();
+                ContainerStartupDiagnostics.start(jwks, TestTls.PASSWORD, postgres.getPassword());
                 var env = new HashMap<String, String>();
                 env.put("AUTH_ENVIRONMENT", "local");
                 env.put("AUTH_DB_HOST", "127.0.0.1");
@@ -73,14 +88,14 @@ class InternalContainerIT {
                 env.put("JAVA_TOOL_OPTIONS", "-Xmx384m -Djavax.net.ssl.trustStore=/tls/trust.p12 -Djavax.net.ssl.trustStorePassword=" + TestTls.PASSWORD);
                 try (var runtime = new GenericContainer<>(image)
                         .withNetworkMode("container:" + postgres.getContainerId()).withEnv(env)
-                        .withFileSystemBind(directory.toAbsolutePath().toString(), "/tls", BindMode.READ_ONLY)
+                        .withFileSystemBind(serverMount.toAbsolutePath().toString(), "/tls", BindMode.READ_ONLY)
                         .withCreateContainerCmdModifier(command -> command.getHostConfig().withReadonlyRootfs(true)
                                 .withMemory(768L * 1024 * 1024).withNanoCPUs(1_000_000_000L)
                                 .withTmpFs(Map.of("/tmp", "rw,noexec,nosuid,size=64m")))
                         .waitingFor(Wait.forLogMessage(".*AUTH_INTERNAL_STARTED.*", 1));
                      var client = HttpClient.newBuilder().sslContext(tls.context("os")).build();
                      var probe = HttpClient.newBuilder().sslContext(tls.context(null)).build()) {
-                    runtime.start();
+                    ContainerStartupDiagnostics.start(runtime, TestTls.PASSWORD, postgres.getPassword());
                     String base = "https://localhost:" + postgres.getMappedPort(8443);
                     var health = HttpRequest.newBuilder(URI.create(base + "/health/ready")).GET().timeout(Duration.ofSeconds(5)).build();
                     org.testcontainers.shaded.org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(20)).until(() -> {
@@ -89,6 +104,10 @@ class InternalContainerIT {
                     });
                     assertEquals(200, probe.send(health, HttpResponse.BodyHandlers.ofString()).statusCode());
                     assertEquals("10001", runtime.execInContainer("id", "-u").getStdout().strip());
+                    assertTrue(runtime.getContainerInfo().getMounts().stream().anyMatch(mount ->
+                            "/tls".equals(mount.getDestination().getPath()) && Boolean.FALSE.equals(mount.getRW())));
+                    assertEquals(0, runtime.execInContainer("sh", "-ec",
+                            "test -r /tls/server.p12 && test -r /tls/trust.p12 && test ! -e /tls/ca.p12 && test ! -e /tls/os.p12 && ! touch /tls/write-check").getExitCode());
                     var probeResult = runtime.execInContainer("java", "-cp", "/app/app.jar", InternalHealthProbe.class.getName());
                     assertEquals(0, probeResult.getExitCode(), probeResult.getStderr().replace(TestTls.PASSWORD, "[redacted]"));
                     assertDecision(client, base, user.id(), clientId, true);

@@ -2,6 +2,7 @@ package br.com.fiap.oficina.auth.support;
 
 import javax.net.ssl.*;
 import java.nio.file.*;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.KeyStore;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +47,17 @@ public final class TestTls {
     }
 
     public String path(String name) { return directory.resolve(name).toString(); }
+
+    public Path serverMount() throws Exception {
+        Path mount = Files.createTempDirectory(directory, "server-mount-");
+        boolean posix = Files.getFileStore(mount).supportsFileAttributeView("posix");
+        if (posix) { Files.setPosixFilePermissions(mount, PosixFilePermissions.fromString("rwxr-xr-x")); }
+        for (String name : List.of("server.p12", "trust.p12")) {
+            Path destination = Files.copy(directory.resolve(name), mount.resolve(name));
+            if (posix) { Files.setPosixFilePermissions(destination, PosixFilePermissions.fromString("r--r--r--")); }
+        }
+        return mount;
+    }
 
     public Map<String, String> environment() {
         return Map.of("AUTH_INTERNAL_KEYSTORE", path("server.p12"), "AUTH_INTERNAL_KEYSTORE_PASSWORD", PASSWORD,
