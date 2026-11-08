@@ -1,0 +1,11 @@
+**
+!pom.xml
+!src/
+src/**
+!src/main/
+!src/main/**
+**/.env*
+**/*.key
+**/*.p12
+**/id_rsa
+**/id_ed25519

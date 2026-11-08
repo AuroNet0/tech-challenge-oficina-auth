@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/AuroNet0/tech-challenge-oficina-auth",
+  "jar": "tech-challenge-oficina-auth.jar",
+  "required_classes": ["br/com/fiap/oficina/auth/handler/AuthHandler.class","br/com/fiap/oficina/auth/infrastructure/internal/InternalAuthMain.class"],
+  "entrypoint": [
+    "java",
+    "-cp",
+    "/app/app.jar",
+    "br.com.fiap.oficina.auth.infrastructure.internal.InternalAuthMain"
+  ]
+}
