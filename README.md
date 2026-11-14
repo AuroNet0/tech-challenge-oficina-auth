@@ -59,9 +59,9 @@ O login aceita exatamente os campos textuais `email` e `senha`, com `Content-Typ
 
 O [emissor](src/main/java/br/com/fiap/oficina/auth/infrastructure/security/Rs256TokenIssuer.java) fixa RS256, `typ=JWT` e `kid`. Emite `sub` com UUID do usuário, `iss`, `aud`, `iat`, `nbf`, `exp`, `jti` e `roles` do banco. Os papéis possíveis são `ATENDENTE`, `MECANICO`, `CLIENTE` e `GERENTE`, conforme o enum `Papel`, sem concessão automática. TTL permitido: 60 a 900 segundos, padrão de 900.
 
-`AUTH_JWT_ISSUER` e `AUTH_JWT_AUDIENCE` são obrigatórios. O issuer deve ser HTTPS; o exemplo local usa `https://auth.local.test` e `oficina`. Valores produtivos não identificados. O [verificador interno](src/main/java/br/com/fiap/oficina/auth/infrastructure/security/InternalUserTokenVerifier.java) exige assinatura RS256 com chave pública conhecida, issuer exato, audiência esperada no array `aud`, UUIDs de `sub`/`jti`, nomes conhecidos em `roles` e condições temporais de `iat`/`nbf`/`exp`, incluindo TTL máximo de 900 segundos. A autorização consulta papel e vínculo atuais no banco.
+`AUTH_JWT_ISSUER` e `AUTH_JWT_AUDIENCE` são obrigatórios. O issuer deve ser HTTPS; o exemplo local usa `https://auth.local.test` e `oficina`. No ambiente AWS, issuer e audiência vêm do contrato JWT do stack `edge` do repositório de infraestrutura; o issuer é a URL do API Gateway. O [verificador interno](src/main/java/br/com/fiap/oficina/auth/infrastructure/security/InternalUserTokenVerifier.java) exige assinatura RS256 com chave pública conhecida, issuer exato, audiência esperada no array `aud`, UUIDs de `sub`/`jti`, nomes conhecidos em `roles` e condições temporais de `iat`/`nbf`/`exp`, incluindo TTL máximo de 900 segundos. A autorização consulta papel e vínculo atuais no banco.
 
-Swagger/OpenAPI não é publicado: não há dependência, documento ou rota correspondente no código/configuração. Uma política explícita de proibição não foi identificada; a ausência não comprova essa política.
+Swagger/OpenAPI não é publicado: não há dependência, documento ou rota correspondente no código/configuração. A API é descrita pela coleção Postman em `docs/postman`.
 
 ### Canal interno Auth–OS
 
@@ -138,7 +138,7 @@ Encerre o banco preservando o volume com `docker compose down`.
 
 O [pom.xml](pom.xml) aplica JaCoCo na fase `verify`: regra `BUNDLE`, contador `LINE`, razão `COVEREDRATIO` mínima de `0.80` (80%). Relatórios locais são gerados em `target/site/jacoco/index.html` e `jacoco.xml`.
 
-Cobertura SonarCloud informada para a análise de **13/11/2026: 87,7%**, fornecida para esta atualização, sem nova medição local. Projeto: [SonarCloud](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth).
+Cobertura medida pelo SonarCloud na análise de **13/11/2026: 87,7%**. Projeto: [SonarCloud](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth).
 
 ## 9. CI/CD
 
