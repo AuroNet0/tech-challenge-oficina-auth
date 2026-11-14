@@ -69,6 +69,17 @@ O POST interno exige certificado confiável com EKU `clientAuth` e Subject X.500
 
 O runtime obtém chaves públicas da URL HTTPS confiável `AUTH_JWKS_URI`. Contrato, variáveis TLS e limites: [Auth interno](docs/9.2.3.1-auth-interno-kubernetes.md).
 
+### Coleção Postman
+
+Arquivos disponíveis: a coleção [docs/postman/auth-collection.json](docs/postman/auth-collection.json), com login por perfil, JWKS e casos negativos, e o ambiente [docs/postman/enviroment.json](docs/postman/enviroment.json), com variáveis compartilhadas por todas as coleções do projeto.
+
+1. Importe os dois arquivos no Postman.
+2. Selecione o ambiente **Oficina - AWS**.
+3. Preencha `baseUrl` com a URL do API Gateway do ambiente e os campos de e-mail/senha dos perfis Atendente, Mecânico, Cliente e Gerente; o ambiente é entregue sem credenciais.
+4. Execute a pasta **Login**, que salva os tokens em `tokenAtendente`, `tokenMecanico`, `tokenCliente` e `tokenGerente`.
+
+O mesmo ambiente é usado pelas coleções dos demais serviços e do fluxo completo; não há credenciais nem tokens versionados nesses arquivos.
+
 ## 4. Dados
 
 PostgreSQL (SQL), com banco próprio de identidade. `oficina_auth` é o nome configurado em [.env.example](.env.example). O [Compose](compose.yaml) cria uma instância local dedicada; o nome efetivo vem de `AUTH_DB_NAME`. O código exige `AUTH_DB_*`, sem fallback para o banco dos serviços de negócio. O nome do banco efetivamente implantado não é verificável aqui.
@@ -174,6 +185,7 @@ Readiness verifica validade do certificado, chaves JWKS e consultas às tabelas 
 | `src/main/resources/db/migration` | Migrações Flyway V1/V2 |
 | `src/test` | Unitários, integrações PostgreSQL e teste da imagem |
 | `docs` | Contratos e registros das etapas de segurança |
+| `docs/postman` | Coleção Postman do serviço e ambiente compartilhado |
 | `k8s` | Manifestos Kubernetes de referência do pod auth-internal |
 | `integration/8.3.5` | Fixtures e runtime local; mantidos porque o ambiente BDD do billing-service monta essa pasta, conforme o registro de integração no documento de Auth interno |
 | `scripts` | Contrato e verificador de build, com testes Python |
