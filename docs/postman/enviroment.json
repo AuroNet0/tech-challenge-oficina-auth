@@ -1,0 +1,134 @@
+{
+  "id": "62ed6ca2-4626-4e2f-b7f2-05cc0e32e0fc",
+  "name": "Oficina - AWS",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "emailAtendente",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "senhaAtendente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "emailMecanico",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "senhaMecanico",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "emailCliente",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "senhaCliente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "emailGerente",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "senhaGerente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "tokenAtendente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "tokenMecanico",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "tokenCliente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "tokenGerente",
+      "type": "secret",
+      "enabled": true,
+      "secret": true
+    },
+    {
+      "key": "filialId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "clienteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "veiculoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "osId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "diagnosticoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "reparoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "orcamentoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pagamentoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "color": null,
+  "_postman_variable_scope": "environment"
+}
