@@ -1,5 +1,13 @@
 # Etapa 8.3.2-A.1 — Preparação do canal técnico Auth–OS
 
+> Registro histórico de 24/10/2026. Atualização documental em 13/11/2026:
+> o canal produtivo implementado no código atual usa o runtime HTTPS separado
+> `InternalAuthServer`, com mTLS e JWT, descrito em
+> [Auth interno](../9.2.3.1-auth-interno-kubernetes.md). A rota permanece ausente
+> na Lambda pública. SigV4 e as restrições de exposição abaixo registram aquela etapa.
+> Estado de CI/CD no [README](../../README.md); resultados de outros serviços
+> não foram revalidados neste checkout.
+
 Data: 24/10/2026. **Entrega parcial segura: assinatura, transporte HTTPS, parser de envelope e verificação JWT testáveis; rota interna continua fechada.**
 
 ## 1. Estado inicial, escopo e versões
@@ -17,7 +25,7 @@ Foram revistos AuthHandler/AuthBootstrap/AuthServices, emissor/JWKS/KeyProvider,
 
 ## 2. Resultado arquitetural e motivo de manter HTTP fechado
 
-O ambiente não possui API Gateway HTTP API AWS_IAM implantado/testável autorizado para esta tarefa. O Terraform atual não declara esse canal e continua com configurações legadas. Não foram feitos deploy, Terraform ou chamadas AWS reais. Assim, **não foi comprovado o comportamento do produto AWS quanto a integridade do corpo, principal entregue, permissões efetivas ou impossibilidade de bypass por InvokeFunction**.
+Na etapa histórica, não foi validado um API Gateway HTTP API AWS_IAM real. O estado atual desse recurso externo não é identificável neste checkout. A Lambda de login e o pod `auth-internal` são provisionados pelos stacks `edge` e `platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra), conforme a organização indicada para o projeto; o `ci.yml` deste serviço implanta a imagem do pod. Não há fontes Terraform de provisionamento versionadas aqui. **Os testes locais daquela etapa não comprovam integridade do corpo, principal entregue, permissões efetivas ou impossibilidade de bypass por InvokeFunction no produto AWS.**
 
 Foi possível comprovar localmente que o assinador SDK produz uma assinatura SigV4 que inclui o hash do corpo e que um verificador independente do algoritmo detecta adulterações. Isso não comprova que uma configuração futura do HTTP API rejeitará todo caminho de payload não assinado, nem que uma identidade IAM terá somente o escopo pretendido.
 

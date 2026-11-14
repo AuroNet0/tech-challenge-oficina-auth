@@ -1,433 +1,203 @@
-# Tech Challenge Oficina — Auth Service
+# Tech Challenge Oficina — Auth
 
-AWS Lambda Java 21 com identidade independente, login email/senha, JWT RS256 e JWKS (FIAP Fase 4, Etapas 8.1/8.2).
-Sem Spring Boot, JPA ou acesso aos bancos dos demais serviços.
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=AuroNet0_tech-challenge-oficina-auth&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=AuroNet0_tech-challenge-oficina-auth&metric=coverage)](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth)
 
-**Login por CPF permanece desativado.** O handler HTTP API v2 oferece `POST /api/v1/auth/login`
-e `GET /.well-known/jwks.json`, sem endpoints públicos administrativos.
-Login verifica Argon2id, estado e papéis do PostgreSQL Auth antes de emitir RS256 com UUID no subject.
-Contrato, configuração, exemplos sanitizados e limitações: [docs/authentication.md](docs/authentication.md).
+Serviço de identidade em Java 21, com PostgreSQL próprio e autenticação por email e senha.
+A Lambda recebe eventos API Gateway HTTP API v2, emite JWT RS256 e publica chaves públicas em JWKS.
+O runtime HTTPS `auth-internal` verifica o vínculo atual entre usuário e cliente para o OS Service.
+Domínio e casos de uso são compartilhados pelos adapters, sem Spring ou JPA.
 
-## Implementação
+## 2. Arquitetura do serviço
 
-- Usuario identificado por UUID, email normalizado único, CPF opcional, hash Argon2id e ativação.
-- Papéis CLIENTE, ATENDENTE, MECANICO e GERENTE, sem concessão automática.
-- Vínculos lógicos autorizados com UUID de cliente do OS, sem FK ou consulta externa.
-- Casos de uso internos com porta obrigatória de autorização; nenhuma rota pública administrativa.
-- JDBC com pool máximo de duas conexões, transações e bloqueio pessimista.
-- Flyway V1, PostgreSQL local, Testcontainers e gate JaCoCo de 80%.
-- Rehash condicional sob lock, rate limiting compartilhado via Flyway V2 e JWT de até 15 minutos.
-- JWKS público com cache de 60 s e sobreposição de chaves; provider compartilhado com refresh de 30 s.
-- Adapter Secrets Manager preparado e provedor de arquivo explicitamente local; nenhuma chave gerada no startup.
-# Tech Challenge Oficina - Auth
+```mermaid
+flowchart LR
+    API[API HTTP v2] --> Handler[AuthHandler na Lambda]
+    OS[OS Service] -->|mTLS e JWT original| Interno[InternalAuthServer]
+    Handler --> Login[AutenticarUsuarioUseCase]
+    Interno --> Acesso[VerificarAcessoClienteUseCase]
+    Login --> Dominio[Domínio e portas]
+    Acesso --> Dominio
+    Dominio --> JDBC[Adapters JDBC e transações]
+    JDBC --> DB[(PostgreSQL Auth)]
+    Login --> Emissor[Rs256TokenIssuer]
+    Handler --> JWKS[JwksService]
+    Interno -->|HTTPS| JWKS
+```
 
-Componente serverless responsável pela autenticação de clientes por CPF no ecossistema do Tech Challenge Oficina FIAP.
+Não há RabbitMQ no fluxo implementado. O diagrama reúne componentes do código; a publicação HTTP externa depende da infraestrutura.
 
-A aplicação é uma AWS Lambda desenvolvida em Java 21. Ela recebe uma requisição HTTP no formato de evento do API Gateway HTTP API v2, valida o CPF informado, consulta o cliente em um banco PostgreSQL e, quando o cliente existe e está ativo, gera um JWT para uso posterior pela API principal.
+Pacotes sob `br.com.fiap.oficina.auth`:
 
-## Responsabilidades
+| Pacote | Responsabilidade |
+| --- | --- |
+| `handler` | Entrada Lambda: login e JWKS |
+| `application/usecase` | Autenticação, cadastro, busca, desativação, papéis, vínculos e verificação de acesso |
+| `application/port/in`, `application/port/out` | Contratos de entrada, persistência, transação e segurança |
+| `domain/model`, `domain/enums`, `domain/exception` | Usuário, vínculo de cliente, papéis e invariantes |
+| `infrastructure/persistence/jdbc` | Repositório, transações e limitação de tentativas |
+| `infrastructure/security` | Argon2id, RS256, chaves e JWKS |
+| `infrastructure/config` | Composição, datasource, migração explícita e gerador local de chaves |
+| `infrastructure/internal` | Servidor HTTPS, TLS, inicialização e probe |
+| `service`, `model` | Classes remanescentes, incluindo `JwtService` legado, fora da emissão atual |
 
-- Receber um CPF no corpo da requisição.
-- Validar o CPF antes de consultar o banco.
-- Consultar a tabela `clientes` no PostgreSQL usando JDBC.
-- Verificar se o cliente existe.
-- Verificar se o cliente está ativo.
-- Gerar um JWT quando a autenticação é autorizada.
-- Retornar respostas de erro adequadas quando a requisição é inválida, o CPF é inválido, o cliente não existe, o cliente está inativo ou ocorre erro interno.
+## 3. API e autenticação
 
-Modelo, classes, invariantes, schema, segurança e roteiro completo: [docs/identity.md](docs/identity.md).
+As rotas estão em [AuthHandler](src/main/java/br/com/fiap/oficina/auth/handler/AuthHandler.java) e [InternalAuthServer](src/main/java/br/com/fiap/oficina/auth/infrastructure/internal/InternalAuthServer.java). Não há controllers Spring ou `SecurityConfig`.
 
-## Desenvolvimento local
+| Método | Caminho | Papel (role) exigido |
+| --- | --- | --- |
+| POST | `/api/v1/auth/login` | Nenhum; exige credenciais `email` e `senha` |
+| GET | `/.well-known/jwks.json` | Nenhum; chaves públicas |
+| POST | `/internal/v1/identity/client-access/check` | Serviço `os-service` por mTLS e JWT válido; decisão positiva exige usuário ativo, papel `CLIENTE` atual e vínculo persistido |
+| GET | `/health/live` | Nenhum; HTTPS interno |
+| GET | `/health/ready` | Nenhum; HTTPS interno |
 
-Requer Java 21, Maven e Docker. Copie `.env.example` para `.env`, preencha uma senha local e inicie:
+O listener interno não oferece login ou JWKS. Não há rotas HTTP administrativas para cadastro, papéis ou vínculos.
+
+O login aceita exatamente os campos textuais `email` e `senha`, com `Content-Type: application/json`. Normaliza o email, verifica a senha Argon2id e consulta estado e papéis no banco Auth. Credenciais inválidas e usuário inativo recebem `401`; CPF não autentica. O sucesso retorna `accessToken`, `tokenType` (`Bearer`) e `expiresIn`. Detalhes: [autenticação](docs/authentication.md).
+
+O [emissor](src/main/java/br/com/fiap/oficina/auth/infrastructure/security/Rs256TokenIssuer.java) fixa RS256, `typ=JWT` e `kid`. Emite `sub` com UUID do usuário, `iss`, `aud`, `iat`, `nbf`, `exp`, `jti` e `roles` do banco. Os papéis possíveis são `ATENDENTE`, `MECANICO`, `CLIENTE` e `GERENTE`, conforme o enum `Papel`, sem concessão automática. TTL permitido: 60 a 900 segundos, padrão de 900.
+
+`AUTH_JWT_ISSUER` e `AUTH_JWT_AUDIENCE` são obrigatórios. O issuer deve ser HTTPS; o exemplo local usa `https://auth.local.test` e `oficina`. Valores produtivos não identificados. O [verificador interno](src/main/java/br/com/fiap/oficina/auth/infrastructure/security/InternalUserTokenVerifier.java) exige assinatura RS256 com chave pública conhecida, issuer exato, audiência esperada no array `aud`, UUIDs de `sub`/`jti`, nomes conhecidos em `roles` e condições temporais de `iat`/`nbf`/`exp`, incluindo TTL máximo de 900 segundos. A autorização consulta papel e vínculo atuais no banco.
+
+Swagger/OpenAPI não é publicado: não há dependência, documento ou rota correspondente no código/configuração. Uma política explícita de proibição não foi identificada; a ausência não comprova essa política.
+
+### Canal interno Auth–OS
+
+O POST interno exige certificado confiável com EKU `clientAuth` e Subject X.500 exato, por padrão `CN=os-service`. O corpo contém somente `clienteId`, `userAccessToken`, `requestId` e `issuedAt`. O JWT original autentica o usuário, e o certificado autentica o serviço. A resposta é `{"autorizado":true}` ou `{"autorizado":false}`. Falhas de dependências não autorizam acesso.
+
+O runtime obtém chaves públicas da URL HTTPS confiável `AUTH_JWKS_URI`. Contrato, variáveis TLS e limites: [Auth interno](docs/9.2.3.1-auth-interno-kubernetes.md).
+
+## 4. Dados
+
+PostgreSQL (SQL), com banco próprio de identidade. `oficina_auth` é o nome configurado em [.env.example](.env.example). O [Compose](compose.yaml) cria uma instância local dedicada; o nome efetivo vem de `AUTH_DB_NAME`. O código exige `AUTH_DB_*`, sem fallback para o banco dos serviços de negócio. O nome do banco efetivamente implantado não é verificável aqui.
+
+As migrações Flyway [V1](src/main/resources/db/migration/V1__create_identity_schema.sql) e [V2](src/main/resources/db/migration/V2__create_login_rate_limits.sql) criam `usuarios`, `usuario_papeis`, `usuario_clientes` e `login_tentativas`. `cliente_id` é um vínculo lógico, sem FK para banco externo. A migração ocorre separadamente por `MigrateIdentity`, sem execução automática na inicialização dos runtimes.
+
+## 5. Mensageria
+
+Não há mensageria implementada no Auth. Código, dependências e Compose não apresentam cliente RabbitMQ, configuração de broker, exchanges, filas, DLQ, retry de mensagens, consumidores, publicadores, Inbox ou Outbox. Não há documento dedicado de mensageria deste serviço. As referências a mensagens no [levantamento de autorização](docs/security/authorization-8.3.1.md) tratam de outros serviços.
+
+## 6. Papel na Saga e compensação
+
+O Auth **não participa da Saga** e não executa compensações. Fornece JWT e JWKS para autenticação e validação de identidade pelos serviços, além da verificação síncrona de vínculo no canal Auth–OS. Não há orquestrador, estados de Saga ou comandos de compensação neste repositório.
+
+## 7. Execução local e testes
+
+Pré-requisitos: JDK 21, Maven e Docker ativo com containers Linux. Não há Maven Wrapper; use `mvn`. O Compose inicia somente o PostgreSQL.
+
+1. Copie `.env.example` para `.env` e preencha os placeholders localmente, sem versionar credenciais.
+2. Exporte `AUTH_*` no processo Java. O Compose lê `.env`; o Java não o carrega automaticamente.
+3. Inicie o banco e execute a suíte:
 
 ```bash
 docker compose --env-file .env up -d --wait
 mvn clean verify
 ```
 
-Exporte AUTH_DB_HOST, AUTH_DB_PORT, AUTH_DB_NAME, AUTH_DB_USER, AUTH_DB_PASSWORD e, localmente,
-AUTH_ENVIRONMENT=local e AUTH_DB_SSLMODE=disable no processo Java.
-O Compose lê .env; o Java não o carrega automaticamente. Execute a migração separadamente:
-- Java 21
-- AWS Lambda
-- AWS Lambda Java Core
-- AWS Lambda Java Events
-- PostgreSQL/JDBC
-- JWT com `jjwt`
-- Jackson
-- Maven
-- JUnit 5
-- Terraform
-- GitHub Actions
-
-O código da Lambda utiliza os tipos `APIGatewayV2HTTPEvent` e `APIGatewayV2HTTPResponse`, mas este repositório não provisiona API Gateway.
-
-## Arquitetura
-
-Fluxo conceitual:
-
-```text
-Cliente -> API Gateway -> Lambda Auth -> RDS PostgreSQL -> JWT
-```
-
-A Lambda Auth é o componente serverless de autenticação por CPF. A exposição HTTP pelo API Gateway deve existir fora deste repositório ou ser integrada por outro componente de infraestrutura.
-
-## Diagrama da arquitetura
-
-```mermaid
-flowchart LR
-    CLIENT["Cliente"]
-
-    APIGW["Amazon API Gateway"]
-
-    subgraph LAMBDA["AWS Lambda - Java 21"]
-        HANDLER["Auth Handler"]
-        CPF["CpfValidator"]
-        CLIENTSERVICE["Consulta do Cliente"]
-        JWT["Gerador JWT"]
-
-        HANDLER --> CPF
-        CPF --> CLIENTSERVICE
-        CLIENTSERVICE --> JWT
-    end
-
-    RDS[("Amazon RDS<br/>PostgreSQL")]
-
-    CLIENT -->|"CPF"| APIGW
-    APIGW -->|"Invocação"| HANDLER
-
-    CLIENTSERVICE -->|"Consulta cliente<br/>por CPF"| RDS
-
-    JWT -->|"JWT"| APIGW
-    APIGW -->|"Token"| CLIENT
-```
-
-## Fluxo de autenticação
-
-1. O API Gateway invoca a Lambda enviando um evento HTTP API v2.
-2. O `AuthHandler` lê o corpo da requisição e tenta convertê-lo para `AuthRequest`.
-3. Se o evento, o corpo ou o JSON forem inválidos, a Lambda retorna `400`.
-4. O CPF recebido é validado por `CpfValidator`.
-5. Se o CPF for inválido, a Lambda retorna `400`.
-6. O CPF é normalizado para conter somente números.
-7. O repositório `JdbcClienteRepository` consulta a tabela `clientes` pelo campo `cpf_cnpj`, também normalizado no SQL com `regexp_replace`.
-8. Se nenhum cliente for encontrado, a Lambda retorna `404`.
-9. Se o cliente existir, mas o campo `ativo` for falso, a Lambda retorna `403`.
-10. Se o cliente existir e estiver ativo, `JwtService` gera um JWT.
-11. A Lambda retorna `200` com o token e a mensagem de sucesso.
-
-## Validação de CPF
-
-A classe `CpfValidator` implementa a validação com as seguintes regras:
-
-- Remove todos os caracteres não numéricos.
-- Exige exatamente 11 dígitos.
-- Rejeita CPFs formados por uma sequência de dígitos iguais.
-- Calcula e valida os dois dígitos verificadores oficiais do CPF.
-
-## Entrada e saída
-
-### Requisição
-
-Formato esperado no corpo da requisição:
-
-```json
-{
-  "cpf": "123.456.789-09"
-}
-```
-
-O CPF pode conter pontuação, pois a aplicação remove caracteres não numéricos durante a validação e a consulta.
-
-### Resposta de sucesso
-
-Status HTTP: `200`
-
-```json
-{
-  "token": "jwt-gerado-pela-lambda",
-  "message": "Autenticação realizada com sucesso."
-}
-```
-
-### Principais respostas de erro
-
-| Status | Mensagem | Quando ocorre |
-| --- | --- | --- |
-| `400` | `Requisição inválida.` | Evento vazio, corpo vazio ou JSON inválido. |
-| `400` | `CPF inválido.` | CPF ausente, malformado ou com dígitos verificadores inválidos. |
-| `404` | `Cliente não encontrado.` | CPF válido, mas sem cliente correspondente no banco. |
-| `403` | `Cliente inativo.` | Cliente encontrado com `ativo = false`. |
-| `500` | `Erro interno.` | Falha inesperada, incluindo erro de configuração, banco ou geração do token. |
-
-Todas as respostas são retornadas com `Content-Type: application/json` e o formato:
-
-```json
-{
-  "token": null,
-  "message": "Mensagem de retorno."
-}
-```
-
-## JWT
-
-O JWT identifica o cliente autenticado para uso posterior pela API principal. O token é assinado com HS256 usando uma chave derivada por SHA-256 a partir da variável `JWT_SECRET`.
-
-Claims geradas atualmente:
-
-| Claim | Origem |
-| --- | --- |
-| `sub` | CPF normalizado do cliente, somente números. |
-| `clienteId` | Campo `id` retornado da tabela `clientes`. |
-| `nome` | Campo `nome` retornado da tabela `clientes`. |
-| `tipo` | Valor fixo `CLIENTE`. |
-| `iat` | Data/hora de emissão. |
-| `exp` | Data/hora de expiração. |
-
-A expiração implementada é de 1 hora a partir da emissão.
-
-## Variáveis de ambiente
-
-| Variável | Obrigatória | Sensível | Uso |
-| --- | --- | --- | --- |
-| `DB_HOST` | Sim | Não | Host do PostgreSQL. |
-| `DB_PORT` | Não | Não | Porta do PostgreSQL. Quando ausente, usa `5432`. |
-| `DB_NAME` | Sim | Não | Nome do banco de dados. |
-| `DB_USER` | Sim | Não | Usuário de conexão com o banco. |
-| `DB_PASSWORD` | Sim | Sim | Senha de conexão com o banco. |
-| `JWT_SECRET` | Sim | Sim | Segredo usado para assinatura dos JWTs. |
-
-No Terraform deste repositório, a Lambda recebe:
-
-- `DB_HOST` a partir do endereço da instância RDS `tech-challenge-oficina-postgres`.
-- `DB_PORT` a partir da porta da instância RDS.
-- `DB_NAME` com valor `oficina`.
-- `DB_USER` com valor `oficina_admin`.
-- `DB_PASSWORD` a partir da variável sensível `db_password`.
-- `JWT_SECRET` a partir da variável sensível `jwt_secret`.
-
-## Banco de dados
-
-A consulta implementada espera a tabela `clientes` com, pelo menos, os campos:
-
-- `id`
-- `nome`
-- `cpf_cnpj`
-- `ativo`
-
-SQL utilizado pela Lambda:
-
-```sql
-SELECT id, nome, cpf_cnpj, ativo
-FROM clientes
-WHERE regexp_replace(cpf_cnpj, '[^0-9]', '', 'g') = ?
-LIMIT 1
-```
-
-## Terraform
-
-Os arquivos Terraform ficam em `terraform/` e provisionam os recursos necessários para a Lambda Auth.
-
-Recursos criados por este repositório:
-
-- `aws_lambda_function.auth`
-  - Nome: `tech-challenge-oficina-auth`
-  - Runtime: `java21`
-  - Handler: `br.com.fiap.oficina.auth.handler.AuthHandler::handleRequest`
-  - Artefato: `target/tech-challenge-oficina-auth.jar`
-  - Memória: `512 MB`
-  - Timeout: `15 s`
-  - Execução dentro de VPC
-- `aws_iam_role.lambda`
-  - Role de execução da Lambda.
-- `aws_iam_role_policy_attachment.lambda_basic_execution`
-  - Anexa `AWSLambdaBasicExecutionRole`.
-- `aws_iam_role_policy_attachment.lambda_vpc_access`
-  - Anexa `AWSLambdaVPCAccessExecutionRole`.
-- `aws_security_group.lambda`
-  - Security group da Lambda.
-  - Permite egress TCP `5432` para o CIDR da VPC compartilhada.
-
-Data sources utilizados:
-
-- `aws_vpc.shared`
-  - Busca uma VPC com tags `Project = tech-challenge-oficina` e `Environment = shared`.
-- `aws_subnets.private`
-  - Busca subnets privadas na VPC compartilhada com tag `Tier = private`.
-- `aws_db_instance.postgres`
-  - Busca a instância RDS `tech-challenge-oficina-postgres`.
-
-Este repositório não cria RDS, VPC, subnets, API Gateway, rotas HTTP ou Swagger/OpenAPI.
-
-## Remote State
-
-O backend remoto S3 está configurado em `terraform/versions.tf`:
-
-| Configuração | Valor |
-| --- | --- |
-| Bucket | `tech-challenge-oficina-terraform-state-b1cfa326` |
-| Key | `auth/terraform.tfstate` |
-| Região | `us-east-1` |
-| Criptografia | `encrypt = true` |
-| Lock | `use_lockfile = true` |
-
-## Build
-
-Executar testes:
-
-```bash
-mvn test
-```
-
-Gerar o pacote da aplicação:
-
-```bash
-mvn package
-```
-
-Gerar o artefato da Lambda sem executar testes:
+4. Migre o banco local explicitamente:
 
 ```bash
 java -cp target/tech-challenge-oficina-auth.jar br.com.fiap.oficina.auth.infrastructure.config.MigrateIdentity
-docker compose down
 ```
 
-Para usar o handler localmente, configure também AUTH_JWT_ISSUER, AUTH_JWT_AUDIENCE,
-AUTH_KEY_PROVIDER=local-file e AUTH_LOCAL_KEY_FILE absoluto em diretório privado ignorado pelo Git.
-O comando `java -cp target/tech-challenge-oficina-auth.jar br.com.fiap.oficina.auth.infrastructure.config.GenerateLocalKeys`
-gera um arquivo novo apenas com AUTH_ENVIRONMENT=local, fora da Lambda. A chave só assina após a janela
-de publicação inicial de 90 s. Não há usuários/senhas padrão. Veja o roteiro completo na documentação de autenticação.
+O exemplo configura `AUTH_ENVIRONMENT`, `AUTH_DB_HOST`, `AUTH_DB_PORT`, `AUTH_DB_NAME`, `AUTH_DB_USER`, `AUTH_DB_PASSWORD` e `AUTH_DB_SSLMODE`. Para login/JWKS, configure também `AUTH_KEY_PROVIDER`, `AUTH_LOCAL_KEY_FILE`, `AUTH_JWT_ISSUER`, `AUTH_JWT_AUDIENCE` e `AUTH_JWT_TTL_SECONDS`, conforme [autenticação](docs/authentication.md). O provedor de arquivo e `sslmode=disable` são restritos ao modo local; o banco sem TLS exige host literal `127.0.0.1`.
 
-O PostgreSQL fica em 127.0.0.1:5544 (porta configurável). O encerramento preserva o volume exclusivo.
-Testcontainers cria seu próprio banco descartável; não depende desse Compose, AWS ou OS Service.
-`mvn test` executa os unitários; `mvn clean verify` exige Docker e verifica integração, cobertura e pacote.
-Relatório: `target/site/jacoco/index.html`.
-O artefato esperado pelo Terraform é:
+Com `AUTH_KEY_PROVIDER=local-file`, `AUTH_ENVIRONMENT=local` e caminho absoluto privado em `AUTH_LOCAL_KEY_FILE`, gere as chaves explicitamente:
 
-```text
-target/tech-challenge-oficina-auth.jar
+```bash
+java -cp target/tech-challenge-oficina-auth.jar br.com.fiap.oficina.auth.infrastructure.config.GenerateLocalKeys
 ```
 
-O `pom.xml` usa `maven-shade-plugin` para empacotar a aplicação e suas dependências em um JAR executável pela Lambda.
+O arquivo não é sobrescrito; a chave começa a assinar após a janela inicial de publicação de 90 segundos. Não há usuário/senha padrão; o provisionamento ocorre por casos de uso internos com autorização.
 
-## Execução e testes locais
+`mvn test` executa unitários. `mvn clean verify` inclui integrações PostgreSQL com Testcontainers, pacote e gate JaCoCo. Os bancos de teste são descartáveis e independem do Compose. Docker é obrigatório para essas integrações. Para incluir o teste da imagem produtiva, que sem a propriedade fica ignorado:
 
-O projeto possui testes unitários com JUnit 5 para validação de CPF, geração de JWT e comportamento do handler.
+```bash
+docker build -t oficina-auth:ci .
+mvn clean verify -Dauth.internal.image=oficina-auth:ci
+```
 
-## Compatibilidade e implantação
+O runtime interno exige banco, `AUTH_JWKS_URI`, issuer/audience e stores PKCS12 com suas senhas e certificados confiáveis. Sua entrada é `InternalAuthMain`; configuração completa em [Auth interno](docs/9.2.3.1-auth-interno-kubernetes.md). O harness `integration/8.3.5/AuthLocalRuntime.java` é separado da imagem produtiva.
 
-O runtime HTTPS interno para Kubernetes, independente da Lambda, está documentado em
-[9.2.3.1 — Auth interno](docs/9.2.3.1-auth-interno-kubernetes.md), incluindo Docker,
-mTLS, JWKS público, variáveis, probes e ajustes necessários na Platform.
+Encerre o banco preservando o volume com `docker compose down`.
 
-Preservados nome da Lambda, runtime java21, handler e artefato `target/tech-challenge-oficina-auth.jar`.
-O código JWT HS256 legado permanece isolado e depreciado para referência de contrato.
-Terraform não foi alterado: a futura infraestrutura deverá configurar banco Auth, AUTH_DB_*,
-segredos próprios, TLS e execução separada de migração. Não reaproveitar DB_* ou RDS do OS.
+## 8. Qualidade e cobertura
 
-**O workflow existente realiza deploy após push/manual em homolog/main.**
-Não executar commit, push, merge, deploy ou terraform apply como parte da validação local.
-O CI passa a executar clean verify antes do job de deploy existente.
+O [pom.xml](pom.xml) aplica JaCoCo na fase `verify`: regra `BUNDLE`, contador `LINE`, razão `COVEREDRATIO` mínima de `0.80` (80%). Relatórios locais são gerados em `target/site/jacoco/index.html` e `jacoco.xml`.
 
-Pendências: implantação AWS e rotação operacional auditada; 8.3 (segurança dos serviços e propriedade de ordens),
-8.4 (E2E de segurança). Consulte [limitações e infraestrutura futura](docs/identity.md#próximas-etapas).
-Não há servidor local, Docker Compose ou emulador de Lambda configurado neste repositório.
+Cobertura SonarCloud informada para a análise de **13/11/2026: 87,7%**, fornecida para esta atualização, sem nova medição local. Projeto: [SonarCloud](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth).
 
-## CI/CD
+A imagem solicitada `docs/img/sonarcloud.png` não existe no repositório. A marcação `![SonarCloud](docs/img/sonarcloud.png)` fica registrada como código, sem criar um link relativo quebrado; sua publicação depende da inclusão futura do arquivo.
 
-O workflow `.github/workflows/ci-cd.yml` executa CI/CD para as branches `homolog` e `main`.
+## 9. CI/CD
 
-Gatilhos:
+O workflow é [.github/workflows/ci.yml](.github/workflows/ci.yml): `pull_request` e `push` para `main` e `homolog`, além de `workflow_dispatch`.
 
-- `push` para `homolog` e `main`.
-- `pull_request` para `homolog` e `main`.
-- `workflow_dispatch`.
+O job `verify` configura Java 21 e Python 3.13, testa o verificador de build, constrói a imagem Linux/amd64 e executa `mvn -B -ntp clean verify -Dauth.internal.image="$IMAGE"`, incluindo testes, gate JaCoCo e verificação do runtime da imagem. Depois executa análise SonarCloud. A espera bloqueante pelo Quality Gate (`sonar.qualitygate.wait=true`) ocorre somente em **push na main**; falhas da própria análise continuam falhando a etapa nos demais eventos. `SONAR_TOKEN` é exigido em toda execução dessa etapa.
 
-Job `CI`:
+Depois da análise, `scripts/verify_build.py --image` confere relatórios, pacote, imagem e proveniência local. A varredura implementada procura padrões de chaves privadas, access keys AWS, JWTs completos e nomes de arquivos sensíveis no JAR, no JAR da imagem e em `src/main`; não cobre integralmente o histórico Git. A verificação completa também rejeita testes ignorados. Resumos sanitizados são gerados/publicados com `always()`.
 
-- Faz checkout do código.
-- Configura Java 21 com distribuição Temurin.
-- Usa cache Maven.
-- Seleciona `./mvnw` se existir; caso contrário, usa `mvn`.
-- Executa `mvn -B test`.
-- Executa `mvn -B package -DskipTests`.
-- Configura Terraform.
-- Executa `terraform fmt -check`.
-- Executa `terraform init -backend=false -input=false`.
-- Executa `terraform validate`.
-- Publica o artefato `target/tech-challenge-oficina-auth.jar`.
+O job `deploy` depende de `verify` e roda **somente em push na main**. Assume role AWS via OIDC e consulta EKS/ECR no preflight. Se cluster ou repositório não existir, registra skip; outros erros falham. Quando existem, usa o SHA completo como tag: reutiliza a imagem existente ou constrói e publica a tag. Atualiza o Deployment por digest `sha256`, usando `kubectl set image` e `kubectl rollout status --timeout=300s`. O workflow não atualiza a Lambda.
 
-Job `Deploy Lambda`:
-
-- Executa somente em `push` ou execução manual nas branches `homolog` e `main`.
-- Não executa em `pull_request`.
-- Usa o environment `homolog` para a branch `homolog`.
-- Usa o environment `production` para a branch `main`.
-- Baixa o JAR gerado no job de CI.
-- Autentica na AWS via GitHub OIDC usando `aws-actions/configure-aws-credentials`.
-- Assume a role definida em `vars.AWS_DEPLOY_ROLE_ARN`.
-- Executa `terraform init`.
-- Executa `terraform apply -auto-approve -input=false`.
-
-Secrets e variables usados pelo workflow:
-
-| Nome | Tipo | Uso |
+| Nome | Origem | Uso |
 | --- | --- | --- |
-| `AWS_DEPLOY_ROLE_ARN` | GitHub Environment Variable | Role AWS assumida via OIDC para deploy. |
-| `DB_PASSWORD` | GitHub Environment Secret | Valor de `TF_VAR_db_password`. |
-| `JWT_SECRET` | GitHub Environment Secret | Valor de `TF_VAR_jwt_secret`. |
+| `SONAR_TOKEN` | Secret do GitHub Actions | Análise SonarCloud |
+| `AWS_ROLE_ARN` | Variável do GitHub Actions (`vars`) | Role assumida via OIDC no deploy |
+| `GITHUB_TOKEN` | Token disponibilizado pelo GitHub Actions | Ambiente da etapa SonarCloud |
 
-## Estratégia de branches
+## 10. Implantação
 
-- `homolog`: branch de homologação.
-- `main`: branch de produção.
-- Alterações devem ser propostas via Pull Request.
-- O workflow valida Pull Requests para `homolog` e `main`.
-- O deploy por Terraform ocorre após merge/push nas branches `homolog` ou `main`.
-- As branches devem permanecer protegidas conforme o fluxo adotado pelo projeto.
+A Lambda de login é provisionada pelo stack `edge`, e o pod `auth-internal` pelo stack `platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra), conforme a organização de infraestrutura indicada para o projeto. O serviço interno roda no EKS por meio dos manifestos gerados pelo stack `platform`; o `ci.yml` deste repositório faz o deploy de sua imagem. A geração e o estado efetivo desses recursos externos não são verificáveis neste checkout.
 
-## Segurança
+| Configuração | Valor no workflow/runtime |
+| --- | --- |
+| Região AWS | `us-east-1` |
+| Cluster EKS e namespace | `tc-oficina-p4-demo-a` |
+| Deployment e container | `auth-internal` |
+| Repositório ECR | `tc-oficina-p4-demo-a-auth` |
+| Referência implantada | Registry obtido da conta AWS em execução, repositório e digest |
+| Porta | HTTPS `8443`, exposta no Dockerfile e padrão de `AUTH_INTERNAL_PORT` |
+| Liveness | `GET /health/live` |
+| Readiness | `GET /health/ready` |
 
-- Segredos não devem ser versionados no repositório.
-- `JWT_SECRET` é informação sensível e deve ser mantido em GitHub Secrets/Environments ou mecanismo equivalente.
-- `DB_PASSWORD` é sensível e deve ser mantido fora do código.
-- O arquivo `terraform.tfvars.example` contém apenas placeholders.
-- A Lambda recebe permissões AWS por IAM role.
-- O deploy usa GitHub OIDC para assumir uma role AWS, evitando credenciais AWS estáticas no workflow.
-- A Lambda roda em subnets privadas e usa security group com saída para PostgreSQL na VPC compartilhada.
-- A validação de CPF reduz chamadas desnecessárias ao banco e impede autenticação com CPF malformado.
+Readiness verifica validade do certificado, chaves JWKS e consultas às tabelas de identidade. Liveness responde sem consultar essas dependências enquanto o servidor não está encerrando. O `HEALTHCHECK` do [Dockerfile](Dockerfile) executa `InternalHealthProbe`. Não há fontes Terraform de provisionamento versionadas neste serviço.
 
-## Dependências entre repositórios
+## 11. Estrutura do repositório
 
-Este repositório representa somente o componente de autenticação serverless. Ele depende de outros componentes do ecossistema para a solução completa:
+| Pasta | Conteúdo |
+| --- | --- |
+| `src/main/java` | Domínio, casos de uso, Lambda e runtime interno |
+| `src/main/resources/db/migration` | Migrações Flyway V1/V2 |
+| `src/test` | Unitários, integrações PostgreSQL e teste da imagem |
+| `docs` | Contratos e registros das etapas de segurança |
+| `integration/8.3.5` | Fixtures e runtime local; mantidos porque o ambiente BDD do billing-service monta essa pasta, conforme o registro de integração no documento de Auth interno |
+| `scripts` | Contrato e verificador de build, com testes Python |
+| `.github/workflows` | CI e deploy da imagem interna |
 
-- `tech-challenge-oficina-api`
-  - API principal que deve consumir/validar o JWT emitido por esta Lambda.
-  - Este repositório não contém a implementação da API principal.
-- `tech-challenge-oficina-k8s-infra`
-  - Infraestrutura Kubernetes da aplicação principal.
-  - Não é provisionada por este repositório.
-- `tech-challenge-oficina-database-infra`
-  - Infraestrutura de banco/rede necessária para a Lambda, incluindo a VPC compartilhada, subnets privadas e a instância RDS PostgreSQL esperada pelo Terraform.
-  - Este repositório apenas referencia esses recursos por data sources.
+## Verificações e divergências documentais
 
-Não há submódulos, chamadas diretas ou automações entre esses repositórios no código atual deste projeto.
+### Afirmações não confirmadas
 
-## Ordem de provisionamento
+- Política explícita proibindo Swagger/OpenAPI: não identificada; somente a ausência da publicação foi confirmada.
+- Imagem `docs/img/sonarcloud.png`: ausente; não criada por estar fora dos arquivos permitidos.
+- Medição remota dos 87,7%: não verificada; valor e data fornecidos para esta documentação.
+- Valores produtivos de issuer, audience e banco, conta AWS, ambiente atualmente ligado e rollout efetivo: não identificados neste checkout.
+- Código externo dos stacks `edge`/`platform` e montagem BDD no billing-service: ausentes deste repositório. A divisão dos stacks foi indicada para esta atualização; o uso do harness pelo Billing consta no registro de Auth interno, sem nova validação externa.
+- Política de imutabilidade configurada no ECR: não identificada. O workflow usa tag por SHA, reutiliza a tag existente e implanta por digest; não configura essa política.
 
-Antes de aplicar o Terraform deste repositório, a infraestrutura compartilhada precisa existir quando aplicável:
+### Divergências corrigidas ou contextualizadas
 
-1. VPC compartilhada com tags `Project = tech-challenge-oficina` e `Environment = shared`.
-2. Subnets privadas na VPC com tag `Tier = private`.
-3. Instância RDS PostgreSQL com identificador `tech-challenge-oficina-postgres`.
-4. Banco `oficina`, usuário `oficina_admin` e tabela `clientes` compatíveis com a consulta da Lambda.
-5. Secrets/variables configurados no GitHub Environment correspondente.
-6. Build do JAR `target/tech-challenge-oficina-auth.jar`.
-7. Aplicação do Terraform deste repositório.
+- O README antigo alternava CPF/HS256 e email/senha/RS256, subject CPF e UUID, banco externo e banco Auth. O caminho atual é email/senha, Argon2id, RS256, UUID e banco de identidade próprio.
+- O README antigo negava Compose/servidor local e descrevia `ci-cd.yml`, deploy Lambda/Terraform e deploy em `homolog`/execução manual. Existem Compose PostgreSQL, runtime HTTPS interno e `ci.yml` com deploy da imagem somente em push na main.
+- Referências a `terraform/lambda.tf`, `network.tf`, `iam.tf` e backend de provisionamento local foram substituídas pela infraestrutura externa. Resíduos locais ignorados não são fontes de provisionamento versionadas.
+- Os registros das etapas 8.1, 8.3.1, 8.3.2-A e 8.3.2-A.1 descrevem estados históricos, incluindo handler fechado e canal interno futuro. As notas de atualização apontam para o runtime implementado; resultados de outros serviços não são validações atuais deste checkout.
+- O documento de autenticação negava servidor HTTP local; agora distingue Lambda, harness e servidor interno. Evidências antigas permanecem datadas e não são resultados desta revisão documental.
 
-## Swagger
+### Referências relativas corrigidas
 
-Este repositório não possui Swagger/OpenAPI.
-
-A Lambda está preparada para receber eventos HTTP API v2 do API Gateway, mas a configuração de API Gateway, rotas públicas e documentação Swagger, quando existirem, devem estar em outro repositório ou componente de infraestrutura.
+- A referência ao workflow inexistente `ci-cd.yml` foi substituída por [.github/workflows/ci.yml](.github/workflows/ci.yml).
+- Referências às fontes `terraform/` removidas foram substituídas pelo link do repositório de infraestrutura.
+- A referência antiga `docs/identity.md#próximas-etapas` deixou de descrever o estado atual; os contratos atuais apontam para [autenticação](docs/authentication.md) e [runtime interno](docs/9.2.3.1-auth-interno-kubernetes.md).
+- A imagem ausente aparece somente como marcação literal. Os links relativos ativos apontam para arquivos existentes.

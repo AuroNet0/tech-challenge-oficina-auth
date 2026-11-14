@@ -3,6 +3,8 @@
 > Registro da entrega 8.1. O estado atual do handler, autenticação RS256/JWKS, rehash e V2
 > está documentado em [authentication.md](authentication.md). As descrições de 503 permanente
 > e da 8.2 como futura abaixo representam o estado histórico da 8.1.
+> Atualização de 13/11/2026: o runtime HTTPS interno está documentado em
+> [Auth interno](9.2.3.1-auth-interno-kubernetes.md); CI/CD atual no [README](../README.md).
 
 ## Escopo e estado operacional
 
@@ -226,9 +228,10 @@ deixarão de obter token após implantação; esta é a alternativa segura ao re
 login por CPF operacional. Não houve implantação ou alteração de recursos de produção nesta etapa.
 Nenhuma variável legada DB_* é lida pelo novo código.
 
-Terraform permanece sem alterações. Atualmente aponta ao RDS legado e injeta DB_*/JWT_SECRET;
-isso não inicializa banco nem reativa o handler fechado. Não aplicar esta infraestrutura como preparação
-do novo banco. Nenhum apply, push ou deploy é necessário para testar.
+A Lambda de login e o pod `auth-internal` são provisionados, respectivamente, pelos stacks
+`edge` e `platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra),
+conforme a organização indicada para o projeto. Não há fontes Terraform de provisionamento
+versionadas neste serviço; o estado externo não foi verificado nesta revisão documental.
 
 Antes de implantação futura:
 - Provisionar PostgreSQL exclusivo e credenciais distintas (migration/runtime), com grants mínimos.
@@ -238,8 +241,9 @@ Antes de implantação futura:
 - Dimensionar memória/timeout, conexões/concurrency e avaliar RDS Proxy.
 - Implementar autorização administrativa e procedimento auditado para a primeira conta GERENTE.
 
-**Atenção:** o workflow existente faz deploy e terraform apply em push/workflow_dispatch nas branches
-homolog/main. Nenhum push/merge deve ser feito sem revisão e autorização de implantação.
+O workflow atual `ci.yml` valida PRs e pushes em `homolog`/`main` e aceita execução manual.
+Seu job `deploy` atualiza a imagem do pod `auth-internal` somente em push na `main`, após
+`verify` e preflight EKS/ECR. Não executa Terraform nem atualiza a Lambda.
 
 ## Próximas etapas
 
