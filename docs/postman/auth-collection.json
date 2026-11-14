@@ -362,3 +362,367 @@
     }
   ]
 }
+{
+  "info": {
+    "_postman_id": "d4b25d39-a502-4369-b164-590a12e1005f",
+    "name": "Oficina - Auth",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "item": [
+        {
+          "name": "Login Atendente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+                  "pm.test(\"Resposta tem accessToken\", function () { var json = pm.response.json(); pm.expect(json.accessToken).to.be.a(\"string\"); });",
+                  "pm.test(\"tokenType é Bearer\", function () { var json = pm.response.json(); pm.expect(json.tokenType).to.eql(\"Bearer\"); });",
+                  "pm.test(\"expiresIn é número\", function () { var json = pm.response.json(); pm.expect(json.expiresIn).to.be.a(\"number\"); });",
+                  "pm.environment.set(\"tokenAtendente\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{emailAtendente}}\",\"senha\":\"{{senhaAtendente}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica o perfil Atendente e salva o token JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "Login Mecânico",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+                  "pm.test(\"Resposta tem accessToken\", function () { var json = pm.response.json(); pm.expect(json.accessToken).to.be.a(\"string\"); });",
+                  "pm.test(\"tokenType é Bearer\", function () { var json = pm.response.json(); pm.expect(json.tokenType).to.eql(\"Bearer\"); });",
+                  "pm.test(\"expiresIn é número\", function () { var json = pm.response.json(); pm.expect(json.expiresIn).to.be.a(\"number\"); });",
+                  "pm.environment.set(\"tokenMecanico\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{emailMecanico}}\",\"senha\":\"{{senhaMecanico}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica o perfil Mecânico e salva o token JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "Login Cliente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+                  "pm.test(\"Resposta tem accessToken\", function () { var json = pm.response.json(); pm.expect(json.accessToken).to.be.a(\"string\"); });",
+                  "pm.test(\"tokenType é Bearer\", function () { var json = pm.response.json(); pm.expect(json.tokenType).to.eql(\"Bearer\"); });",
+                  "pm.test(\"expiresIn é número\", function () { var json = pm.response.json(); pm.expect(json.expiresIn).to.be.a(\"number\"); });",
+                  "pm.environment.set(\"tokenCliente\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{emailCliente}}\",\"senha\":\"{{senhaCliente}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica o perfil Cliente e salva o token JWT."
+          },
+          "response": []
+        },
+        {
+          "name": "Login Gerente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+                  "pm.test(\"Resposta tem accessToken\", function () { var json = pm.response.json(); pm.expect(json.accessToken).to.be.a(\"string\"); });",
+                  "pm.test(\"tokenType é Bearer\", function () { var json = pm.response.json(); pm.expect(json.tokenType).to.eql(\"Bearer\"); });",
+                  "pm.test(\"expiresIn é número\", function () { var json = pm.response.json(); pm.expect(json.expiresIn).to.be.a(\"number\"); });",
+                  "pm.environment.set(\"tokenGerente\", pm.response.json().accessToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{emailGerente}}\",\"senha\":\"{{senhaGerente}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Autentica o perfil Gerente e salva o token JWT."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Chaves",
+      "item": [
+        {
+          "name": "Buscar JWKS",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });",
+                  "pm.test(\"Array keys não vazio\", function () { var json = pm.response.json(); pm.expect(json.keys).to.be.an(\"array\").that.is.not.empty; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/.well-known/jwks.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ".well-known",
+                "jwks.json"
+              ]
+            },
+            "description": "Retorna as chaves públicas JWK usadas para validar tokens JWT."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Negativos",
+      "item": [
+        {
+          "name": "Login com senha errada",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });",
+                  "pm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"email\":\"{{emailAtendente}}\",\"senha\":\"senha-errada-invalida\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Tenta autenticar com senha incorreta; espera 401."
+          },
+          "response": []
+        },
+        {
+          "name": "Acesso com token inválido",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 401\", function () { pm.response.to.have.status(401); });\npm.test(\"Tempo de resposta < 5000ms\", function () { pm.expect(pm.response.responseTime).to.be.below(5000); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer token-invalido"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/clientes",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes"
+              ]
+            },
+            "description": "Tenta acessar rota protegida com token inválido; espera 401."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
