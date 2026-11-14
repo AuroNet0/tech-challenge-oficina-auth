@@ -162,6 +162,8 @@ A Lambda de login é provisionada pelo stack `edge`, e o pod `auth-internal` pel
 | Liveness | `GET /health/live` |
 | Readiness | `GET /health/ready` |
 
+A pasta `k8s/` contém [k8s/auth-internal.yaml](k8s/auth-internal.yaml), com manifestos de referência de ServiceAccount, ConfigMap, Service e Deployment do pod `auth-internal` (canal interno Auth–OS), que espelham o que o stack `platform` do repositório `tech-challenge-oficina-k8s-infra` aplica no EKS. Os valores entre `<...>` (endpoint do RDS, issuer/audience/JWKS, conta AWS e tag ou digest da imagem) são fornecidos pela infraestrutura em cada ambiente; segredos de TLS e banco são referenciados por nome e não ficam no repositório. O Job de migração do banco Auth é criado pela infraestrutura a cada deploy, e o login público (Lambda) é provisionado pelo stack `edge`; nenhum dos dois está replicado em `k8s/`. O arquivo não é aplicado diretamente por este repositório: o deploy da infraestrutura provisiona e aplica os recursos no cluster, enquanto o job `deploy` do `ci.yml` apenas atualiza a imagem do Deployment com `kubectl set image`.
+
 Readiness verifica validade do certificado, chaves JWKS e consultas às tabelas de identidade. Liveness responde sem consultar essas dependências enquanto o servidor não está encerrando. O `HEALTHCHECK` do [Dockerfile](Dockerfile) executa `InternalHealthProbe`. Não há fontes Terraform de provisionamento versionadas neste serviço.
 
 ## 11. Estrutura do repositório
@@ -172,32 +174,7 @@ Readiness verifica validade do certificado, chaves JWKS e consultas às tabelas 
 | `src/main/resources/db/migration` | Migrações Flyway V1/V2 |
 | `src/test` | Unitários, integrações PostgreSQL e teste da imagem |
 | `docs` | Contratos e registros das etapas de segurança |
+| `k8s` | Manifestos Kubernetes de referência do pod auth-internal |
 | `integration/8.3.5` | Fixtures e runtime local; mantidos porque o ambiente BDD do billing-service monta essa pasta, conforme o registro de integração no documento de Auth interno |
 | `scripts` | Contrato e verificador de build, com testes Python |
 | `.github/workflows` | CI e deploy da imagem interna |
-
-## Verificações e divergências documentais
-
-### Afirmações não confirmadas
-
-- Política explícita proibindo Swagger/OpenAPI: não identificada; somente a ausência da publicação foi confirmada.
-- Imagem `docs/img/sonarcloud.png`: ausente; não criada por estar fora dos arquivos permitidos.
-- Medição remota dos 87,7%: não verificada; valor e data fornecidos para esta documentação.
-- Valores produtivos de issuer, audience e banco, conta AWS, ambiente atualmente ligado e rollout efetivo: não identificados neste checkout.
-- Código externo dos stacks `edge`/`platform` e montagem BDD no billing-service: ausentes deste repositório. A divisão dos stacks foi indicada para esta atualização; o uso do harness pelo Billing consta no registro de Auth interno, sem nova validação externa.
-- Política de imutabilidade configurada no ECR: não identificada. O workflow usa tag por SHA, reutiliza a tag existente e implanta por digest; não configura essa política.
-
-### Divergências corrigidas ou contextualizadas
-
-- O README antigo alternava CPF/HS256 e email/senha/RS256, subject CPF e UUID, banco externo e banco Auth. O caminho atual é email/senha, Argon2id, RS256, UUID e banco de identidade próprio.
-- O README antigo negava Compose/servidor local e descrevia `ci-cd.yml`, deploy Lambda/Terraform e deploy em `homolog`/execução manual. Existem Compose PostgreSQL, runtime HTTPS interno e `ci.yml` com deploy da imagem somente em push na main.
-- Referências a `terraform/lambda.tf`, `network.tf`, `iam.tf` e backend de provisionamento local foram substituídas pela infraestrutura externa. Resíduos locais ignorados não são fontes de provisionamento versionadas.
-- Os registros das etapas 8.1, 8.3.1, 8.3.2-A e 8.3.2-A.1 descrevem estados históricos, incluindo handler fechado e canal interno futuro. As notas de atualização apontam para o runtime implementado; resultados de outros serviços não são validações atuais deste checkout.
-- O documento de autenticação negava servidor HTTP local; agora distingue Lambda, harness e servidor interno. Evidências antigas permanecem datadas e não são resultados desta revisão documental.
-
-### Referências relativas corrigidas
-
-- A referência ao workflow inexistente `ci-cd.yml` foi substituída por [.github/workflows/ci.yml](.github/workflows/ci.yml).
-- Referências às fontes `terraform/` removidas foram substituídas pelo link do repositório de infraestrutura.
-- A referência antiga `docs/identity.md#próximas-etapas` deixou de descrever o estado atual; os contratos atuais apontam para [autenticação](docs/authentication.md) e [runtime interno](docs/9.2.3.1-auth-interno-kubernetes.md).
-- A imagem ausente aparece somente como marcação literal. Os links relativos ativos apontam para arquivos existentes.
