@@ -1,5 +1,10 @@
 # Autenticação — Etapa 8.2
 
+> Atualização documental em 13/11/2026: o contrato de login/JWKS abaixo continua implementado.
+> O servidor HTTPS interno e o harness local são descritos em
+> [Auth interno](9.2.3.1-auth-interno-kubernetes.md). Evidências datadas ao final
+> são históricas; configuração e CI/CD atuais estão no [README](../README.md).
+
 ## Arquitetura implementada
 
 AWS Lambda Java 21, eventos API Gateway HTTP API v2, JDBC/PostgreSQL exclusivo do Auth.
@@ -236,8 +241,12 @@ AuthBootstrap inicializa serviços uma vez por contexto aquecido; pool Hikari m�
 sem pool por requisição e sem Flyway em invocações. AuthServices.close encerra recursos em processos locais.
 Falha de configuração não ativa fallback CPF/HS256.
 
-Este repositório Terraform só declara Lambda/rede/IAM, sem API Gateway. O código anterior já usava
-APIGatewayV2HTTPEvent. Configurar rotas explícitas POST /api/v1/auth/login e GET /.well-known/jwks.json,
+A Lambda de login é provisionada pelo stack `edge` e o pod `auth-internal` pelo stack
+`platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra),
+conforme a organização de infraestrutura indicada para o projeto. Não há fontes Terraform
+de provisionamento versionadas neste serviço. O `ci.yml` deste repositório implanta a imagem
+do pod `auth-internal`; não atualiza a Lambda. O estado dos stacks externos não foi verificado aqui.
+O código usa APIGatewayV2HTTPEvent. As rotas esperadas são POST /api/v1/auth/login e GET /.well-known/jwks.json,
 payloadFormatVersion 2.0. Método vem de requestContext.http.method, caminho de rawPath.
 Não remover prefixos/stages arbitrariamente; custom domain/base mapping deve produzir essas rawPaths.
 Eventos REST v1 ou sem contexto recebem 400. CORS/OPTIONS, se necessários, ficam na configuração
@@ -273,7 +282,9 @@ Requer JDK 21, Maven e Docker engine ativo.
    Não há senha/conta administrativa padrão ou endpoint de autoprovisionamento.
 9. Encerrar somente este ambiente com `docker compose down`, preservando seu volume.
 
-Não há servidor HTTP local adicionado. Os testes constroem eventos v2 representativos e chamam o handler;
+O handler Lambda não inicia servidor HTTP. Há um runtime HTTPS interno em `InternalAuthMain`
+e um harness local em `integration/8.3.5/AuthLocalRuntime.java`, fora da imagem produtiva.
+Os testes públicos constroem eventos v2 representativos e chamam o handler;
 o teste do JAR usa o construtor real e as mesmas variáveis que a Lambda usaria, sem credenciais AWS.
 `mvn test`: unitários e negativos.
 `mvn clean verify`: inclui integração PostgreSQL e subprocesso usando o JAR Shade.
@@ -311,9 +322,9 @@ memória/timeout/concurrency/pool; TLS e observabilidade sanitizada.
 O adapter Secrets Manager foi testado com cliente simulado; permissões, custos, rede, caches de borda,
 rotação real e performance Lambda não foram validados na AWS.
 
-Na infraestrutura atual, a role só tem políticas básicas de logs/VPC e o security group só libera
-saída PostgreSQL TCP 5432 na VPC compartilhada. Portanto, ainda faltam explicitamente permissão
-Secrets Manager e conectividade HTTPS 443 ao endpoint privado/NAT, além das novas variáveis.
+As permissões IAM e regras de rede efetivamente implantadas não são identificáveis neste
+repositório. O adapter Secrets Manager requer acesso ao secret configurado e conectividade
+HTTPS; sua concessão e configuração pertencem à infraestrutura externa.
 
 ## Evidências locais — 24/10/2026
 

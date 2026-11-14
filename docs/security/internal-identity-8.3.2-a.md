@@ -1,5 +1,12 @@
 # Etapa 8.3.2-A — Contrato interno de identidade e resolução de vínculos
 
+> Registro histórico de 24/10/2026. Atualização documental em 13/11/2026:
+> a rota continua ausente na Lambda pública, mas existe no runtime HTTPS separado
+> `InternalAuthServer`, com mTLS e verificação JWT. Consulte
+> [Auth interno](../9.2.3.1-auth-interno-kubernetes.md) e o [README](../../README.md).
+> As afirmações sobre outros serviços registram a análise daquela etapa e não
+> representam inspeção atual de código externo neste checkout.
+
 Data: 24/10/2026. Repositório `AuroNet0/tech-challenge-oficina-auth`, branch `homolog`, base `eb1809a081d2c7cc6a2c01576807fd248f9f3065`.
 
 ## 1. Entrega e condição de exposição
@@ -8,7 +15,7 @@ Data: 24/10/2026. Repositório `AuroNet0/tech-challenge-oficina-auth`, branch `h
 
 A análise obrigatória abrangeu `docs/identity.md`, `docs/authentication.md`, `docs/security/authorization-8.3.1.md`, modelos, casos de uso, JDBC/transações, handler/bootstrap, configuração Lambda/Terraform e testes existentes. A 8.3.1 estava não rastreada e foi preservada sem edição. Não foram alterados os outros três microsserviços.
 
-O Terraform atual declara Lambda, IAM básico/VPC e banco/rede legados, mas não um API Gateway com autorização de serviço. Não existe PKI/mTLS ou uma cadeia de validação SigV4 local que comprove a origem de um evento Lambda. Implementar leitura de `requestContext.authorizer.iam` sem essa fronteira de confiança permitiria a um invocador direto forjar contexto. Portanto, foi aplicada a alternativa explicitamente autorizada nesta etapa: entregar o núcleo testável e bloquear exposição até existir autenticação técnica verificável.
+Na etapa histórica, a ausência de um canal técnico validado motivou entregar o núcleo testável sem expor a rota na Lambda. Ler `requestContext.authorizer.iam` de um evento isolado não comprova sua origem. Atualmente o canal implementado é o runtime HTTPS separado com mTLS. O provisionamento da Lambda de login e do pod `auth-internal` pertence aos stacks `edge` e `platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra), conforme a organização indicada para o projeto; `ci.yml` deste serviço implanta a imagem do pod. Não há fontes Terraform de provisionamento versionadas aqui; o estado externo não foi verificado.
 
 Isso não é uma aprovação pendente para criar um novo serviço: não será criado Authorization Service. Falta aprovar/provisionar e validar o canal técnico do próprio Auth em etapa separada. Testes unitários com doubles da porta não comprovam autenticação criptográfica e não são apresentados como tal.
 

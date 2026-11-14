@@ -1,5 +1,11 @@
 # Etapa 8.3.1 — Arquitetura de autorização e matriz de permissões
 
+> Registro histórico de 24/10/2026. Atualização documental em 13/11/2026:
+> as matrizes de outros serviços e propostas abaixo não representam uma nova inspeção
+> desses repositórios. O Auth atual oferece login email/senha, RS256/JWKS e canal
+> HTTPS interno com mTLS, conforme [Auth interno](../9.2.3.1-auth-interno-kubernetes.md).
+> Provisionamento e CI/CD atuais estão no [README](../../README.md).
+
 Data: 24/10/2026. **Proposta para revisão e aprovação; nenhuma segurança nova foi implementada.**
 
 ## 1. Escopo, evidências e estado Git
@@ -361,7 +367,7 @@ Operações administrativas financeiras futuras exigem segregação, escopo e au
 | Credenciais/AMQP locais não são baseline de produção | application.yml: OS guest/5672; E defaults locais; vhost `/` | TLS, secrets por serviço, vhost por ambiente e rede privada |
 | Readiness não cobre Rabbit | application.yml dos três desabilita health rabbit | Monitorar reconnect, lag, DLQ, Outbox FAILED; decidir readiness sem derrubar consumidores por indisponibilidade transitória |
 | Documento histórico pode induzir erro | identity.md descreve fase 8.1; B messaging.md antecede MP | Código/commits atuais e authentication.md/mercado-pago.md prevalecem |
-| IaC Auth ainda aponta fluxo legado | terraform/lambda.tf, network.tf, iam.tf | Planejar atualização separada; nenhuma aplicação de Terraform nesta etapa |
+| Provisionamento externo do Auth | Repositório tech-challenge-oficina-k8s-infra, stacks edge e platform | Lambda de login no edge e pod auth-internal no platform; ci.yml deste serviço implanta a imagem do pod |
 
 Não foi executado pentest ou scan de dependências, e não se afirma prontidão de produção por esta revisão estática.
 
@@ -517,7 +523,7 @@ Apenas assinatura/algoritmo/claims/tempo e roles presentes no token são garanti
 Planejamento de infraestrutura, **sem execução**:
 
 - Auth Lambda precisa rotas API Gateway HTTP v2 login/JWKS e, se aprovada, API interna com autorização de serviço. IAM de invocação impede forjar contexto/sourceIp; permissionamento direto não pode contornar a borda.
-- Antes de implantar Auth, atualizar IaC legado: `terraform/lambda.tf` ainda injeta DB_* e JWT_SECRET do banco antigo, `network.tf` só libera saída 5432 e `iam.tf` não concede Secrets Manager. Preparar banco Auth exclusivo, AUTH_*, secret ARN, `GetSecretValue` mínimo/Decrypt quando aplicável e HTTPS 443 via endpoint privado/NAT. Não aplicar Terraform existente como se já suportasse 8.2/8.3.
+- O provisionamento da Lambda de login e do pod `auth-internal` pertence, respectivamente, aos stacks `edge` e `platform` do repositório [tech-challenge-oficina-k8s-infra](https://github.com/AuroNet0/tech-challenge-oficina-k8s-infra), conforme a organização indicada para o projeto. Não há fontes Terraform de provisionamento versionadas neste serviço. O `ci.yml` deste repositório implanta a imagem do pod `auth-internal` somente em push na `main`. Permissões e rede efetivamente implantadas não foram verificadas neste checkout; configuração atual do serviço no [README](../../README.md).
 - JVM/pods Resource Server precisam DNS e egress HTTPS ao JWKS/API interna, trust store/CA confiáveis e relógios sincronizados. Eles **não precisam** da chave privada Auth nem de acesso aos secrets de assinatura.
 - Para Auth Lambda→serviço Kubernetes ou serviço→Lambda interno: planejar ingress privado/API Gateway/IAM ou mTLS/PKI, trust anchors, expiração/rotação de credenciais de serviço, allowlists e timeouts. Auth não acessa banco OS; seu runtime atual não chama APIs de negócio para resolver propriedade.
 - Kubernetes: Secrets por serviço/ambiente, ServiceAccounts/IAM apropriados, NetworkPolicies entre serviços/broker/bancos e ingress mínimo. Nenhum Bearer de usuário em manifestos/probes. API Gateway/IAM e mTLS são alternativas a escolher e validar, não capacidades já instaladas.
