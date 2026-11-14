@@ -1,0 +1,189 @@
+# Manifestos de referência do pod auth-internal (canal interno Auth-OS).
+# Espelham o que o stack platform do repositório tech-challenge-oficina-k8s-infra aplica no EKS.
+# Os valores entre <...> são fornecidos pela infraestrutura em cada ambiente (RDS, JWT, conta AWS).
+# Segredos (TLS e banco) são referenciados por nome e NÃO ficam neste repositório.
+# A migração do banco Auth (Job auth-migrate-<release>) é criada pela infraestrutura a cada Deploy e não é replicada aqui.
+# O login público (Lambda) é provisionado pelo stack edge da infraestrutura.
+# O CI deste repositório atualiza somente a imagem do Deployment (kubectl set image).
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: auth-internal
+  namespace: tc-oficina-p4-demo-a
+  labels:
+    app.kubernetes.io/part-of: oficina-phase4
+    oficina/environment: demo-a
+    oficina/managed-by: platform
+automountServiceAccountToken: false
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-internal-config
+  namespace: tc-oficina-p4-demo-a
+  labels:
+    app.kubernetes.io/part-of: oficina-phase4
+    oficina/environment: demo-a
+    oficina/managed-by: platform
+data:
+  AUTH_INTERNAL_PORT: '8443'
+  AUTH_INTERNAL_KEYSTORE: /tls/identity.p12
+  AUTH_INTERNAL_TRUSTSTORE: /tls/truststore.p12
+  AUTH_INTERNAL_OS_SUBJECT: CN=os-service
+  AUTH_INTERNAL_PROBE_HOST: auth-internal.tc-oficina-p4-demo-a.svc.cluster.local
+  AUTH_DB_HOST: <RDS_ENDPOINT>
+  AUTH_DB_PORT: '5432'
+  AUTH_DB_NAME: oficina_auth
+  AUTH_DB_SSLMODE: verify-full
+  AUTH_DB_SSLROOTCERT: /rds-ca/ca.pem
+  AUTH_INTERNAL_DB_POOL_SIZE: '2'
+  AUTH_JWT_ISSUER: <VALOR_FORNECIDO_PELA_INFRA>
+  AUTH_JWT_AUDIENCE: <VALOR_FORNECIDO_PELA_INFRA>
+  AUTH_JWKS_URI: <VALOR_FORNECIDO_PELA_INFRA>
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-internal
+  namespace: tc-oficina-p4-demo-a
+  labels:
+    app.kubernetes.io/part-of: oficina-phase4
+    oficina/environment: demo-a
+    oficina/managed-by: platform
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth-internal
+  ports:
+    - name: https
+      port: 8443
+      targetPort: 8443
+      appProtocol: https
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-internal
+  namespace: tc-oficina-p4-demo-a
+  labels:
+    app.kubernetes.io/part-of: oficina-phase4
+    oficina/environment: demo-a
+    oficina/managed-by: platform
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: auth-internal
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: oficina-phase4
+        oficina/environment: demo-a
+        oficina/managed-by: platform
+        app.kubernetes.io/name: auth-internal
+        oficina/role: business
+    spec:
+      serviceAccountName: auth-internal
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: auth-internal
+          image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/tc-oficina-p4-demo-a-auth:<TAG_OU_DIGEST>
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: https
+              containerPort: 8443
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 768Mi
+          envFrom:
+            - configMapRef:
+                name: auth-internal-config
+          env:
+            - name: AUTH_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: auth-postgres
+                  key: username
+            - name: AUTH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-postgres
+                  key: password
+            - name: AUTH_INTERNAL_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-internal-tls
+                  key: password
+            - name: AUTH_INTERNAL_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: auth-internal-tls
+                  key: password
+          startupProbe:
+            httpGet:
+              scheme: HTTPS
+              port: https
+              path: /health/live
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              scheme: HTTPS
+              port: https
+              path: /health/live
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          readinessProbe:
+            httpGet:
+              scheme: HTTPS
+              port: https
+              path: /health/ready
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: tls
+              mountPath: /tls
+              readOnly: true
+            - name: rds-ca
+              mountPath: /rds-ca
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tls
+          secret:
+            secretName: auth-internal-tls
+            defaultMode: 288
+        - name: rds-ca
+          configMap:
+            name: rds-ca
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi
