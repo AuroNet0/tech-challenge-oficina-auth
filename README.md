@@ -140,8 +140,6 @@ O [pom.xml](pom.xml) aplica JaCoCo na fase `verify`: regra `BUNDLE`, contador `L
 
 Cobertura SonarCloud informada para a análise de **13/11/2026: 87,7%**, fornecida para esta atualização, sem nova medição local. Projeto: [SonarCloud](https://sonarcloud.io/summary/new_code?id=AuroNet0_tech-challenge-oficina-auth).
 
-A imagem solicitada `docs/img/sonarcloud.png` não existe no repositório. A marcação `![SonarCloud](docs/img/sonarcloud.png)` fica registrada como código, sem criar um link relativo quebrado; sua publicação depende da inclusão futura do arquivo.
-
 ## 9. CI/CD
 
 O workflow é [.github/workflows/ci.yml](.github/workflows/ci.yml): `pull_request` e `push` para `main` e `homolog`, além de `workflow_dispatch`.
